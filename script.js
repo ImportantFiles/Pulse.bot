@@ -55,7 +55,32 @@ function initializeApp() {
   elements.copyButton.addEventListener("click", copySummaryToClipboard);
   elements.startNewButton.addEventListener("click", startNewReview);
   elements.cancelDialogButton.addEventListener("click", () => elements.copyDialog.close());
-  document.addEventListener("paste", handlePaste);
+ document.addEventListener("paste", handlePaste);
+window.addEventListener("paste", handlePaste, true);
+
+window.addEventListener("focus", async () => {
+  try {
+    if (!navigator.clipboard?.read) return;
+
+    const items = await navigator.clipboard.read();
+
+    for (const item of items) {
+      const type = item.types.find(t => t.startsWith("image/"));
+
+      if (type) {
+        const blob = await item.getType(type);
+
+        processScreenshot(
+          new File([blob], "clipboard.png", { type })
+        );
+
+        break;
+      }
+    }
+  } catch {
+    // Ignore permission errors
+  }
+});
   renderEntries();
 }
 
@@ -88,10 +113,27 @@ function handleFileSelection(event) {
 }
 
 function handlePaste(event) {
-  const imageItem = Array.from(event.clipboardData?.items || []).find((item) => item.type.startsWith("image/"));
-  if (imageItem) {
-    processScreenshot(imageItem.getAsFile());
+
+  const items =
+      event.clipboardData?.items ||
+      event.originalEvent?.clipboardData?.items ||
+      [];
+
+  for (const item of items) {
+
+      if (!item.type.startsWith("image/")) continue;
+
+      event.preventDefault();
+
+      const file = item.getAsFile();
+
+      if (file) {
+          processScreenshot(file);
+      }
+
+      return;
   }
+
 }
 
 async function processScreenshot(file) {
@@ -268,7 +310,12 @@ function findValueNearLabel(lines, labels, valuePattern, excludedLabels = []) {
 
     for (let offset = 1; offset <= 4 && index + offset < lines.length; offset += 1) {
       const nextLine = lines[index + offset];
-      const nextLineValue = nextLine.match(valuePattern);
+      const merged =
+    nextLine.replace(/\s+/g, "");
+
+const nextLineValue =
+    merged.match(valuePattern) ||
+    nextLine.match(valuePattern);
       if (nextLineValue) return nextLineValue[0];
       if (isKnownMetricLabel(nextLine)) break;
     }
@@ -282,7 +329,7 @@ function moneyPattern() {
 }
 
 function percentPattern() {
-  return /[-+]?\(?\d{1,3}(?:,\d{3})*(?:\.\d+)?\)?\s?%/i;
+  return /[-−–—+]?\s*\(?\d{1,3}(?:,\d{3})*(?:\.\d+)?\)?\s*%/i;
 }
 
 function normalizeLabel(value) {
@@ -319,22 +366,22 @@ function parseMoney(value) {
 
 function parsePercent(value) {
 
-  value = value
-    .replace(/\u2212/g, "-")
-    .replace(/\u2013/g, "-")
-    .replace(/\u2014/g, "-");
+    value = value
+        .replace(/\u2212/g, "-")
+        .replace(/\u2013/g, "-")
+        .replace(/\u2014/g, "-")
+        .replace(/\s+/g, "");
 
-  const negative =
-    value.includes("(") ||
-    value.includes("-");
+    const negative = /^-/.test(value) || value.includes("(");
 
-  const numeric = Number(
-    value.replace(/[,%()\s-]/g, "")
-  );
+    const numeric = Number(
+        value.replace(/[^0-9.]/g, "")
+    );
 
-  if (Number.isNaN(numeric)) return null;
+    if (Number.isNaN(numeric))
+        return null;
 
-  return negative ? -numeric : numeric;
+    return negative ? -numeric : numeric;
 }
 
 function handleEntrySubmit(event) {
