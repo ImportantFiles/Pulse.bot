@@ -7,7 +7,6 @@ const state = {
   editingId: null
 };
 
-
 const elements = {
   entryForm: document.getElementById("entryForm"),
   uploadZone: document.getElementById("uploadZone"),
