@@ -209,25 +209,28 @@ function showPreview(file) {
 }
 
 function extractMetrics(rawText) {
-
   const lines = normalizeOcrText(rawText);
-  const balance = findMoneyValue(lines, ["balance"]);
-  const closedProfit = findMoneyValue(lines, ["profit/loss","profit loss","profit"]);
-  const equity = findMoneyValue(lines, ["equity"], ["equity percentage"]);
-  const growth = findPercentValue(lines, ["growth"]);
 
-  const missing = [
-    ["Balance", balance],
-    ["Profit/Loss", closedProfit],
-    ["Equity", equity],
-    ["Growth", growth]
-  ].filter(([,v])=>v===null).map(([l])=>l);
+  let balance = findMoneyValue(lines, ["balance"]);
+  let closedProfit = findMoneyValue(lines, ["profit/loss","profit loss","profit"]);
+  let equity = findMoneyValue(lines, ["equity"], ["equity percentage"]);
+  let growth = findPercentValue(lines, ["growth"]);
 
-  if (missing.length) {
-    throw new Error(`Could not read ${missing.join(", ")} from this screenshot.`);
+  if ([balance, closedProfit, equity, growth].some(v => v === null)) {
+    const money = rawText.match(/[-−–—]?\d[\d,]*\.\d+\s?USD/g) || [];
+    const percent = rawText.match(/[-−–—]?\d+(?:\.\d+)?\s?%/g) || [];
+    if (balance === null && money[1]) balance = parseMoney(money[1]);
+    if (closedProfit === null && money[0]) closedProfit = parseMoney(money[0]);
+    if (equity === null && money[2]) equity = parseMoney(money[2]);
+    if (growth === null && percent[0]) growth = parsePercent(percent[0]);
   }
 
-  return {balance,closedProfit,equity,growth};
+  const missing = [["Balance",balance],["Profit/Loss",closedProfit],["Equity",equity],["Growth",growth]]
+    .filter(([,v])=>v===null).map(([k])=>k);
+
+  if (missing.length) throw new Error(`Could not read ${missing.join(", ")} from this screenshot.`);
+
+  return { balance, closedProfit, equity, growth };
 }
 
 function normalizeOcrText(rawText) {
