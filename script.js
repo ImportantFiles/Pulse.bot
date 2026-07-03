@@ -55,32 +55,9 @@ function initializeApp() {
   elements.copyButton.addEventListener("click", copySummaryToClipboard);
   elements.startNewButton.addEventListener("click", startNewReview);
   elements.cancelDialogButton.addEventListener("click", () => elements.copyDialog.close());
- document.addEventListener("paste", handlePaste);
-window.addEventListener("paste", handlePaste, true);
-
-window.addEventListener("focus", async () => {
-  try {
-    if (!navigator.clipboard?.read) return;
-
-    const items = await navigator.clipboard.read();
-
-    for (const item of items) {
-      const type = item.types.find(t => t.startsWith("image/"));
-
-      if (type) {
-        const blob = await item.getType(type);
-
-        processScreenshot(
-          new File([blob], "clipboard.png", { type })
-        );
-
-        break;
-      }
-    }
-  } catch {
-    // Ignore permission errors
-  }
-});
+  document.addEventListener("paste", handlePaste);
+  window.addEventListener("paste", handlePaste, true);
+  elements.uploadZone.addEventListener("paste", handlePaste);
   renderEntries();
 }
 
@@ -113,27 +90,32 @@ function handleFileSelection(event) {
 }
 
 function handlePaste(event) {
+  if (event.defaultPrevented) return;
 
-  const items =
-      event.clipboardData?.items ||
-      event.originalEvent?.clipboardData?.items ||
-      [];
+  const clipboard = event.clipboardData || event.originalEvent?.clipboardData;
+  const file = getImageFromClipboard(clipboard);
 
-  for (const item of items) {
-
-      if (!item.type.startsWith("image/")) continue;
-
-      event.preventDefault();
-
-      const file = item.getAsFile();
-
-      if (file) {
-          processScreenshot(file);
-      }
-
-      return;
+  if (file) {
+    event.preventDefault();
+    processScreenshot(file);
   }
+}
 
+function getImageFromClipboard(clipboard) {
+  if (!clipboard) return null;
+
+  const itemFile = Array.from(clipboard.items || [])
+    .map((item) => {
+      if (item.kind !== "file") return null;
+      const file = item.getAsFile();
+      return file && file.type.startsWith("image/") ? file : null;
+    })
+    .find(Boolean);
+
+  if (itemFile) return itemFile;
+
+  return Array.from(clipboard.files || [])
+    .find((file) => file.type.startsWith("image/")) || null;
 }
 
 async function processScreenshot(file) {
@@ -199,6 +181,7 @@ console.log(g);
     }
 
     state.ocrData = extractMetrics(result.data.text);
+    state.ocrData.growth = await refineGrowthValue(processedImage, result, state.ocrData.growth);
     updateMetricPreview();
     elements.ocrStatus.textContent = "OCR complete";
     setMessage("Screenshot processed. Review the extracted values.", "success");
@@ -218,7 +201,7 @@ async function preprocessImage(file) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
-      const scale = 3;
+      const scale = 4;
       const canvas = document.createElement("canvas");
       canvas.width = img.width * scale;
       canvas.height = img.height * scale;
@@ -227,25 +210,85 @@ async function preprocessImage(file) {
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-      const image = ctx.getImageData(0,0,canvas.width,canvas.height);
+      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const d = image.data;
-      const contrast = 1.8;
-      const brightness = 12;
+      let total = 0;
 
       for (let i = 0; i < d.length; i += 4) {
+        total += Math.max(d[i], d[i + 1], d[i + 2]);
+      }
 
-    d[i] = Math.min(255, d[i] * 1.15 + 8);
+      const average = total / (d.length / 4);
+      const darkBackground = average < 128;
+      const threshold = darkBackground
+        ? Math.min(245, average + 42)
+        : Math.max(10, average - 42);
 
-    d[i + 1] = Math.min(255, d[i + 1] * 1.15 + 8);
+      for (let i = 0; i < d.length; i += 4) {
+        const value = Math.max(d[i], d[i + 1], d[i + 2]);
+        const ink = darkBackground ? value > threshold : value < threshold;
+        const output = ink ? 0 : 255;
 
-    d[i + 2] = Math.min(255, d[i + 2] * 1.15 + 8);
-
-}
-      ctx.putImageData(image,0,0);
+        d[i] = output;
+        d[i + 1] = output;
+        d[i + 2] = output;
+      }
+      ctx.putImageData(image, 0, 0);
       canvas.toBlob(resolve);
     };
     img.src = URL.createObjectURL(file);
   });
+}
+
+async function refineGrowthValue(processedImage, result, currentGrowth) {
+  try {
+    const crop = await cropAroundGrowth(processedImage, result);
+    if (!crop) return currentGrowth;
+
+    const cropText = await recognizeGrowthCrop(crop);
+    const cropGrowth = extractGrowthFromText(cropText);
+
+    if (cropGrowth !== null && (cropGrowth < 0 || currentGrowth === null)) {
+      return cropGrowth;
+    }
+
+    return currentGrowth;
+  } catch {
+    return currentGrowth;
+  }
+}
+
+async function recognizeGrowthCrop(image) {
+  const result = await Tesseract.recognize(image, "eng", {
+    tessedit_pageseg_mode: 7,
+    tessedit_char_whitelist: "Growthgrowth0123456789.,%-−–—() ",
+    preserve_interword_spaces: "1"
+  });
+
+  return result.data.text || "";
+}
+
+async function cropAroundGrowth(image, result) {
+  const growthWord = (result.data.words || [])
+    .find((word) => /growth/i.test(word.text || "") && word.bbox);
+
+  if (!growthWord) return null;
+
+  const bitmap = await createImageBitmap(image);
+  const { x0, y0, x1, y1 } = growthWord.bbox;
+  const paddingX = 70;
+  const paddingY = 80;
+  const sx = Math.max(0, x0 - paddingX);
+  const sy = Math.max(0, y0 - paddingY);
+  const sw = Math.min(bitmap.width - sx, Math.max(260, x1 - sx + 360));
+  const sh = Math.min(bitmap.height - sy, Math.max(130, y1 - sy + 170));
+  const canvas = document.createElement("canvas");
+  canvas.width = sw;
+  canvas.height = sh;
+  const ctx = canvas.getContext("2d");
+
+  ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+  return new Promise((resolve) => canvas.toBlob(resolve));
 }
 
 function showPreview(file) {
@@ -308,6 +351,22 @@ function normalizeOcrText(rawText) {
     .split("\n")
     .map((line) => line.replace(/[|]/g, "/").replace(/\s+/g, " ").trim())
     .filter(Boolean);
+}
+
+function extractGrowthFromText(rawText) {
+  const lines = normalizeOcrText(rawText);
+
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!/growth/i.test(lines[i])) continue;
+
+    const block = lines.slice(i, i + 4).join(" ");
+    const match = block.match(percentPattern());
+
+    if (match) return parsePercent(match[0]);
+  }
+
+  const percent = rawText.match(percentPattern());
+  return percent ? parsePercent(percent[0]) : null;
 }
 
 function findMoneyValue(lines, labels, excludedLabels = []) {
