@@ -308,9 +308,22 @@ function parseMoney(value) {
 }
 
 function parsePercent(value) {
-  const negative = value.includes("(") || value.trim().startsWith("-");
-  const numeric = Number(value.replace(/[,%()\s+-]/g, ""));
+
+  value = value
+    .replace(/\u2212/g, "-")
+    .replace(/\u2013/g, "-")
+    .replace(/\u2014/g, "-");
+
+  const negative =
+    value.includes("(") ||
+    value.includes("-");
+
+  const numeric = Number(
+    value.replace(/[,%()\s-]/g, "")
+  );
+
   if (Number.isNaN(numeric)) return null;
+
   return negative ? -numeric : numeric;
 }
 
