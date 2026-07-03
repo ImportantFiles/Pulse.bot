@@ -146,42 +146,15 @@ async function processScreenshot(file) {
       preserve_interword_spaces: "1"
     });
 
-    console.log("PREPROCESSED OCR");
-    console.log("OCR OUTPUT");
-console.log(result.data.text);
-
-const g = result.data.text.match(/Growth[\s\S]{0,40}/i);
-
-console.log("Growth Block");
-console.log(g);
-
-    if (
-    !result.data.text.match(/[-−–—]?\d+(?:\.\d+)?\s*%/)
-) {
-
-    console.log("Retrying OCR using original image...");
-
-    const retry = await Tesseract.recognize(file, "eng");
-
-    if (
-        retry.data.text.match(/[-−–—]?\d+(?:\.\d+)?\s*%/)
-    ) {
-        result = retry;
-    }
-
-}
-
     if ((result.data.text || "").length < 25) {
       result = await Tesseract.recognize(file, "eng", {
         tessedit_pageseg_mode: 6,
         preserve_interword_spaces: "1"
       });
-      console.log("RAW OCR");
-      console.log(result.data.text);
     }
 
     state.ocrData = extractMetrics(result.data.text);
-    state.ocrData.growth = await refineGrowthValue(processedImage, result, state.ocrData.growth);
+    state.ocrData.growth = await refineGrowthValue(file, processedImage, result, state.ocrData.growth);
     updateMetricPreview();
     elements.ocrStatus.textContent = "OCR complete";
     setMessage("Screenshot processed. Review the extracted values.", "success");
@@ -240,16 +213,20 @@ async function preprocessImage(file) {
   });
 }
 
-async function refineGrowthValue(processedImage, result, currentGrowth) {
+async function refineGrowthValue(originalFile, processedImage, result, currentGrowth) {
   try {
     const crop = await cropAroundGrowth(processedImage, result);
-    if (!crop) return currentGrowth;
+    if (crop) {
+      const cropText = await recognizeGrowthCrop(crop);
+      const cropGrowth = extractGrowthFromText(cropText);
 
-    const cropText = await recognizeGrowthCrop(crop);
-    const cropGrowth = extractGrowthFromText(cropText);
+      if (cropGrowth !== null && (cropGrowth < 0 || currentGrowth === null)) {
+        return cropGrowth;
+      }
+    }
 
-    if (cropGrowth !== null && (cropGrowth < 0 || currentGrowth === null)) {
-      return cropGrowth;
+    if (currentGrowth > 0 && await isGrowthValueRed(originalFile, processedImage, result)) {
+      return -Math.abs(currentGrowth);
     }
 
     return currentGrowth;
@@ -269,8 +246,7 @@ async function recognizeGrowthCrop(image) {
 }
 
 async function cropAroundGrowth(image, result) {
-  const growthWord = (result.data.words || [])
-    .find((word) => /growth/i.test(word.text || "") && word.bbox);
+  const growthWord = findGrowthWord(result);
 
   if (!growthWord) return null;
 
@@ -289,6 +265,49 @@ async function cropAroundGrowth(image, result) {
 
   ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
   return new Promise((resolve) => canvas.toBlob(resolve));
+}
+
+async function isGrowthValueRed(originalFile, processedImage, result) {
+  const growthWord = findGrowthWord(result);
+  if (!growthWord) return false;
+
+  const [originalBitmap, processedBitmap] = await Promise.all([
+    createImageBitmap(originalFile),
+    createImageBitmap(processedImage)
+  ]);
+  const scaleX = originalBitmap.width / processedBitmap.width;
+  const scaleY = originalBitmap.height / processedBitmap.height;
+  const { x0, y1 } = growthWord.bbox;
+  const sx = Math.max(0, Math.floor((x0 * scaleX) - 8));
+  const sy = Math.max(0, Math.floor((y1 * scaleY) + 2));
+  const sw = Math.min(originalBitmap.width - sx, 170);
+  const sh = Math.min(originalBitmap.height - sy, 54);
+  const canvas = document.createElement("canvas");
+  canvas.width = sw;
+  canvas.height = sh;
+  const ctx = canvas.getContext("2d");
+
+  ctx.drawImage(originalBitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+
+  const { data } = ctx.getImageData(0, 0, sw, sh);
+  let redPixels = 0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const red = data[i];
+    const green = data[i + 1];
+    const blue = data[i + 2];
+
+    if (red > 130 && red > green * 1.35 && red > blue * 1.25 && green < 145) {
+      redPixels += 1;
+    }
+  }
+
+  return redPixels >= 12;
+}
+
+function findGrowthWord(result) {
+  return (result.data.words || [])
+    .find((word) => /growth/i.test(word.text || "") && word.bbox);
 }
 
 function showPreview(file) {
