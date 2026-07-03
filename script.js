@@ -56,9 +56,6 @@ function initializeApp() {
   elements.startNewButton.addEventListener("click", startNewReview);
   elements.cancelDialogButton.addEventListener("click", () => elements.copyDialog.close());
   document.addEventListener("paste", handlePaste);
-  window.addEventListener("paste", handlePaste);
-  window.addEventListener("focus", ()=>document.body.focus());
-  document.body.tabIndex=-1;
   renderEntries();
 }
 
@@ -98,7 +95,7 @@ function handlePaste(event) {
 }
 
 async function processScreenshot(file) {
-  if (!file || !(file.type && file.type.startsWith("image/"))) {
+  if (!file || !["image/png", "image/jpeg"].includes(file.type)) {
     setMessage("Please upload a PNG, JPG, or JPEG screenshot.", "error");
     return;
   }
@@ -212,25 +209,6 @@ function showPreview(file) {
 }
 
 function extractMetrics(rawText) {
-
-  const money = rawText.match(/\d[\d,]*\.\d+\s?USD/g) || [];
-  const percent = rawText.match(/[-−–—]?\d+(?:\.\d+)?\s?%/g) || [];
-  
-const growth = parsePercent(percent[0]);
-
-// If Closed Profit is negative but OCR lost the minus sign on Growth,
-// assume Growth is also negative.
-const finalGrowth =
-    money[0] && money[0].includes("-") && growth > 0
-        ? -growth
-        : growth;
-
-return {
-    balance: parseMoney(money[1]),
-    closedProfit: parseMoney(money[0]),
-    equity: parseMoney(money[2]),
-    growth: finalGrowth
-};
 
   const lines = normalizeOcrText(rawText);
   const balance = findMoneyValue(lines, ["balance"]);
