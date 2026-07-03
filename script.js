@@ -286,9 +286,24 @@ function isKnownMetricLabel(value) {
 }
 
 function parseMoney(value) {
-  const negative = value.includes("(") || value.trim().startsWith("-");
-  const numeric = Number(value.replace(/USD/gi, "").replace(/[$,\s()+-]/g, ""));
+
+  value = value
+    .replace(/\u2212/g, "-")
+    .replace(/\u2013/g, "-")
+    .replace(/\u2014/g, "-");
+
+  const negative =
+    value.includes("(") ||
+    value.includes("-");
+
+  const numeric = Number(
+    value
+      .replace(/USD/gi, "")
+      .replace(/[$,\s(),-]/g, "")
+  );
+
   if (Number.isNaN(numeric)) return null;
+
   return negative ? -numeric : numeric;
 }
 
@@ -347,7 +362,7 @@ function buildEntry(firstCloseDate) {
     balance,
     closedProfit: state.ocrData.closedProfit,
     equity,
-    floatingPL: balance - equity,
+    floatingPL: equity - balance,
     growth: state.ocrData.growth,
     trackRecord: calculateTrackRecord(firstCloseDate)
   };
