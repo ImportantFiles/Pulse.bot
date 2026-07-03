@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pulse.bot | RCS Overall Trading Performance Review</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <div class="background-mark" aria-hidden="true"></div>
+  <div class="page-shell">
+    <header class="app-header">
+      <h1>Pulse.bot</h1>
+      <p>RCS Overall Trading Performance Review</p>
+    </header>
+
+    <main class="glass-panel" aria-label="Trading performance review tool">
+      <section class="panel-section" aria-labelledby="add-entry-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Section 1</p>
+            <h2 id="add-entry-title">Add Entry</h2>
+          </div>
+          <span class="status-pill" id="ocrStatus">Awaiting screenshot</span>
+        </div>
+
+        <form id="entryForm" novalidate>
+          <div class="upload-zone" id="uploadZone" tabindex="0" role="button" aria-label="Upload or paste screenshot">
+            <input id="screenshotInput" type="file" accept="image/png,image/jpeg" hidden>
+            <div class="upload-empty" id="uploadEmpty">
+              <span class="upload-icon">+</span>
+              <strong>Drop, paste, or click to upload screenshot</strong>
+              <small>PNG, JPG, or JPEG accepted</small>
+            </div>
+            <img id="previewImage" class="preview-image" alt="Uploaded STT screenshot preview" hidden>
+          </div>
+
+          <div class="form-grid">
+            <label>
+              <span>System</span>
+              <select id="systemSelect" required>
+                <option value="">Select system</option>
+                <option>R2</option>
+                <option>R2.5</option>
+                <option>R10</option>
+                <option>R50</option>
+                <option>R400</option>
+                <option>RX25</option>
+                <option>RX5</option>
+                <option>RC30</option>
+                <option>RS15</option>
+                <option>RA10</option>
+              </select>
+            </label>
+
+            <label>
+              <span>First Closed Trade Date</span>
+              <input id="firstCloseDate" type="text" placeholder="2/18/2025" autocomplete="off" required>
+            </label>
+          </div>
+
+          <div class="metrics-grid" aria-label="OCR extracted metrics">
+            <div>
+              <span>Balance</span>
+              <strong id="balanceValue">--</strong>
+            </div>
+            <div>
+              <span>Closed Profit</span>
+              <strong id="closedProfitValue">--</strong>
+            </div>
+            <div>
+              <span>Equity</span>
+              <strong id="equityValue">--</strong>
+            </div>
+            <div>
+              <span>Growth</span>
+              <strong id="growthValue">--</strong>
+            </div>
+          </div>
+
+          <p class="message" id="formMessage" role="status" aria-live="polite"></p>
+
+          <div class="actions-row">
+            <button class="primary-button" id="addEntryButton" type="submit">+ Add Entry</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel-section" aria-labelledby="entries-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Section 2</p>
+            <h2 id="entries-title">Entries</h2>
+          </div>
+          <span class="counter" id="entryCount">0 saved</span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>System</th>
+                <th>Balance</th>
+                <th>Closed Profit</th>
+                <th>Equity</th>
+                <th>Floating P/L</th>
+                <th>Growth</th>
+                <th>Track Record</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="entriesBody">
+              <tr class="empty-row">
+                <td colspan="8">No entries added yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel-section" aria-labelledby="summary-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Section 3</p>
+            <h2 id="summary-title">Performance Summary</h2>
+          </div>
+          <div class="summary-actions">
+            <button class="secondary-button" id="generateButton" type="button">Generate Summary</button>
+            <button class="primary-button" id="copyButton" type="button" disabled>Copy to GHL</button>
+          </div>
+        </div>
+
+        <div id="summaryContainer" class="summary-container" hidden></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="loading-overlay" id="loadingOverlay" hidden>
+    <div class="loader-card">
+      <div class="loader-ring"></div>
+      <h2>Reading screenshot</h2>
+      <p id="ocrProgress">Initializing OCR...</p>
+    </div>
+  </div>
+
+  <dialog id="copyDialog" class="copy-dialog">
+    <h2>Copied Successfully</h2>
+    <p>The trading performance summary has been copied to your clipboard.</p>
+    <p>Would you like to start a new client review?</p>
+    <div class="dialog-actions">
+      <button class="primary-button" id="startNewButton" type="button">Start New Review</button>
+      <button class="secondary-button" id="cancelDialogButton" type="button">Cancel</button>
+    </div>
+  </dialog>
+</body>
+</html>
