@@ -125,6 +125,22 @@ async function processScreenshot(file) {
     console.log("PREPROCESSED OCR");
     console.log(result.data.text);
 
+    if (
+    !result.data.text.match(/[-−–—]?\d+(?:\.\d+)?\s*%/)
+) {
+
+    console.log("Retrying OCR using original image...");
+
+    const retry = await Tesseract.recognize(file, "eng");
+
+    if (
+        retry.data.text.match(/[-−–—]?\d+(?:\.\d+)?\s*%/)
+    ) {
+        result = retry;
+    }
+
+}
+
     if ((result.data.text || "").length < 25) {
       result = await Tesseract.recognize(file, "eng", {
         tessedit_pageseg_mode: 6,
@@ -168,12 +184,15 @@ async function preprocessImage(file) {
       const contrast = 1.8;
       const brightness = 12;
 
-      for (let i=0;i<d.length;i+=4){
-        let g = d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114;
-        g = (g-128)*contrast + 128 + brightness;
-        g = Math.max(0, Math.min(255,g));
-        d[i]=d[i+1]=d[i+2]=g;
-      }
+      for (let i = 0; i < d.length; i += 4) {
+
+    d[i] = Math.min(255, d[i] * 1.15 + 8);
+
+    d[i + 1] = Math.min(255, d[i + 1] * 1.15 + 8);
+
+    d[i + 2] = Math.min(255, d[i + 2] * 1.15 + 8);
+
+}
       ctx.putImageData(image,0,0);
       canvas.toBlob(resolve);
     };
