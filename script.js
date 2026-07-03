@@ -209,29 +209,9 @@ function showPreview(file) {
 }
 
 function extractMetrics(rawText) {
-
-  const money = rawText.match(/\d[\d,]*\.\d+\s?USD/g) || [];
-  const percent = rawText.match(/[-−–—]?\d+(?:\.\d+)?\s?%/g) || [];
-  
-const growth = parsePercent(percent[0]);
-
-// If Closed Profit is negative but OCR lost the minus sign on Growth,
-// assume Growth is also negative.
-const finalGrowth =
-    money[0] && money[0].includes("-") && growth > 0
-        ? -growth
-        : growth;
-
-return {
-    balance: parseMoney(money[1]),
-    closedProfit: parseMoney(money[0]),
-    equity: parseMoney(money[2]),
-    growth: finalGrowth
-};
-
   const lines = normalizeOcrText(rawText);
   const balance = findMoneyValue(lines, ["balance"]);
-  const closedProfit = findMoneyValue(lines, ["profit/loss","profit loss","profit"]);
+  const closedProfit = findMoneyValue(lines, ["profit/loss","profit loss","closed profit","profit"]);
   const equity = findMoneyValue(lines, ["equity"], ["equity percentage"]);
   const growth = findPercentValue(lines, ["growth"]);
 
@@ -240,13 +220,21 @@ return {
     ["Profit/Loss", closedProfit],
     ["Equity", equity],
     ["Growth", growth]
-  ].filter(([,v])=>v===null).map(([l])=>l);
+  ].filter(([,v]) => v === null).map(([l]) => l);
 
   if (missing.length) {
-    throw new Error(`Could not read ${missing.join(", ")} from this screenshot.`);
+    // Robust fallback supporting negative values
+    const money = rawText.match(/[-−–—]?\d[\d,]*\.\d+\s?USD/g) || [];
+    const percent = rawText.match(/[-−–—]?\d+(?:\.\d+)?\s?%/g) || [];
+    return {
+      balance: parseMoney(money[1] || ""),
+      closedProfit: parseMoney(money[0] || ""),
+      equity: parseMoney(money[2] || ""),
+      growth: parsePercent(percent[0] || "")
+    };
   }
 
-  return {balance,closedProfit,equity,growth};
+  return { balance, closedProfit, equity, growth };
 }
 
 function normalizeOcrText(rawText) {
