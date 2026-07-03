@@ -165,7 +165,13 @@ async function processScreenshot(file) {
     });
 
     console.log("PREPROCESSED OCR");
-    console.log(result.data.text);
+    console.log("OCR OUTPUT");
+console.log(result.data.text);
+
+const g = result.data.text.match(/Growth[\s\S]{0,40}/i);
+
+console.log("Growth Block");
+console.log(g);
 
     if (
     !result.data.text.match(/[-−–—]?\d+(?:\.\d+)?\s*%/)
@@ -256,7 +262,28 @@ function extractMetrics(rawText) {
   let balance = findMoneyValue(lines, ["balance"]);
   let closedProfit = findMoneyValue(lines, ["profit/loss","profit loss","profit"]);
   let equity = findMoneyValue(lines, ["equity"], ["equity percentage"]);
-  let growth = findPercentValue(lines, ["growth"]);
+  let growth = null;
+
+for (let i = 0; i < lines.length; i++) {
+
+    if (!/growth/i.test(lines[i])) continue;
+
+    // kunin ang susunod na 3 lines
+    const block = lines.slice(i, i + 4).join(" ");
+
+    // check kung may minus bago ang percent
+    const m = block.match(/([-−–—]?)\s*(\d+(?:\.\d+)?)\s*%/);
+
+    if (m) {
+
+        growth = parseFloat(m[2]);
+
+        if (m[1])
+            growth *= -1;
+
+        break;
+    }
+}
 
   if ([balance, closedProfit, equity, growth].some(v => v === null)) {
     const money = rawText.match(/[-−–—]?\d[\d,]*\.\d+\s?USD/g) || [];
