@@ -56,6 +56,9 @@ function initializeApp() {
   elements.startNewButton.addEventListener("click", startNewReview);
   elements.cancelDialogButton.addEventListener("click", () => elements.copyDialog.close());
   document.addEventListener("paste", handlePaste);
+  window.addEventListener("paste", handlePaste);
+  window.addEventListener("focus", ()=>document.body.focus());
+  document.body.tabIndex=-1;
   renderEntries();
 }
 
@@ -95,7 +98,7 @@ function handlePaste(event) {
 }
 
 async function processScreenshot(file) {
-  if (!file || !["image/png", "image/jpeg"].includes(file.type)) {
+  if (!file || !(file.type && file.type.startsWith("image/"))) {
     setMessage("Please upload a PNG, JPG, or JPEG screenshot.", "error");
     return;
   }
@@ -209,9 +212,29 @@ function showPreview(file) {
 }
 
 function extractMetrics(rawText) {
+
+  const money = rawText.match(/\d[\d,]*\.\d+\s?USD/g) || [];
+  const percent = rawText.match(/[-−–—]?\d+(?:\.\d+)?\s?%/g) || [];
+  
+const growth = parsePercent(percent[0]);
+
+// If Closed Profit is negative but OCR lost the minus sign on Growth,
+// assume Growth is also negative.
+const finalGrowth =
+    money[0] && money[0].includes("-") && growth > 0
+        ? -growth
+        : growth;
+
+return {
+    balance: parseMoney(money[1]),
+    closedProfit: parseMoney(money[0]),
+    equity: parseMoney(money[2]),
+    growth: finalGrowth
+};
+
   const lines = normalizeOcrText(rawText);
   const balance = findMoneyValue(lines, ["balance"]);
-  const closedProfit = findMoneyValue(lines, ["profit/loss","profit loss","closed profit","profit"]);
+  const closedProfit = findMoneyValue(lines, ["profit/loss","profit loss","profit"]);
   const equity = findMoneyValue(lines, ["equity"], ["equity percentage"]);
   const growth = findPercentValue(lines, ["growth"]);
 
@@ -220,21 +243,13 @@ function extractMetrics(rawText) {
     ["Profit/Loss", closedProfit],
     ["Equity", equity],
     ["Growth", growth]
-  ].filter(([,v]) => v === null).map(([l]) => l);
+  ].filter(([,v])=>v===null).map(([l])=>l);
 
   if (missing.length) {
-    // Robust fallback supporting negative values
-    const money = rawText.match(/[-−–—]?\d[\d,]*\.\d+\s?USD/g) || [];
-    const percent = rawText.match(/[-−–—]?\d+(?:\.\d+)?\s?%/g) || [];
-    return {
-      balance: parseMoney(money[1] || ""),
-      closedProfit: parseMoney(money[0] || ""),
-      equity: parseMoney(money[2] || ""),
-      growth: parsePercent(percent[0] || "")
-    };
+    throw new Error(`Could not read ${missing.join(", ")} from this screenshot.`);
   }
 
-  return { balance, closedProfit, equity, growth };
+  return {balance,closedProfit,equity,growth};
 }
 
 function normalizeOcrText(rawText) {
