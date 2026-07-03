@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="282" height="402" viewBox="0 0 282 402" role="img" aria-labelledby="title desc">
+  <title id="title">Account Details reference screenshot</title>
+  <desc id="desc">Example of the STT Account Details section to capture for Pulse.bot OCR.</desc>
+  <rect width="282" height="402" fill="#2f3843"/>
+  <text x="17" y="24" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="22">myrx5</text>
+  <text x="17" y="53" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="700">Growth</text>
+  <text x="17" y="79" fill="#ff4242" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">-0.32 %</text>
+  <text x="17" y="105" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="700">Profit/Loss</text>
+  <text x="17" y="128" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">-16.10 USD</text>
+  <text x="17" y="158" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="700">Balance</text>
+  <text x="17" y="181" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">4,983.76 USD</text>
+  <text x="17" y="212" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="700">Equity</text>
+  <text x="17" y="235" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">4,997.41 USD</text>
+  <text x="17" y="264" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="700">Equity Percentage</text>
+  <text x="17" y="287" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">100.27 %</text>
+  <text x="17" y="396" fill="#56616e" font-family="Inter, Arial, sans-serif" font-size="13">Updated: 2026-07-03 21:00</text>
+</svg>

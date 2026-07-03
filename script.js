@@ -31,7 +31,10 @@ const elements = {
   ocrProgress: document.getElementById("ocrProgress"),
   copyDialog: document.getElementById("copyDialog"),
   startNewButton: document.getElementById("startNewButton"),
-  cancelDialogButton: document.getElementById("cancelDialogButton")
+  cancelDialogButton: document.getElementById("cancelDialogButton"),
+  guideButton: document.getElementById("guideButton"),
+  guideDialog: document.getElementById("guideDialog"),
+  closeGuideButton: document.getElementById("closeGuideButton")
 };
 
 const metricFields = {
@@ -55,10 +58,27 @@ function initializeApp() {
   elements.copyButton.addEventListener("click", copySummaryToClipboard);
   elements.startNewButton.addEventListener("click", startNewReview);
   elements.cancelDialogButton.addEventListener("click", () => elements.copyDialog.close());
+  elements.guideButton.addEventListener("click", openGuide);
+  elements.closeGuideButton.addEventListener("click", closeGuide);
+  elements.guideDialog.addEventListener("click", handleGuideBackdropClick);
   document.addEventListener("paste", handlePaste);
   window.addEventListener("paste", handlePaste, true);
   elements.uploadZone.addEventListener("paste", handlePaste);
   renderEntries();
+}
+
+function openGuide() {
+  elements.guideDialog.showModal();
+}
+
+function closeGuide() {
+  elements.guideDialog.close();
+}
+
+function handleGuideBackdropClick(event) {
+  if (event.target === elements.guideDialog) {
+    closeGuide();
+  }
 }
 
 function handleUploadKeydown(event) {

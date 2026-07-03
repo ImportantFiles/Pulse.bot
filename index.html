@@ -12,6 +12,8 @@
   <script src="script.js" defer></script>
 </head>
 <body>
+  <button class="guide-button" id="guideButton" type="button">Guide</button>
+
   <div class="background-mark" aria-hidden="true"></div>
   <div class="page-shell">
     <header class="app-header">
@@ -155,6 +157,52 @@
     <div class="dialog-actions">
       <button class="primary-button" id="startNewButton" type="button">Start New Review</button>
       <button class="secondary-button" id="cancelDialogButton" type="button">Cancel</button>
+    </div>
+  </dialog>
+
+  <dialog id="guideDialog" class="guide-dialog" aria-labelledby="guideTitle">
+    <div class="guide-content">
+      <h2 id="guideTitle">How to Use Pulse.bot</h2>
+
+      <ol class="guide-steps">
+        <li>Open STT and go to the Account Dashboard page.</li>
+        <li>
+          Take a screenshot of ONLY the Account Details section from STT.
+          <a href="account-details-reference.svg" target="_blank" rel="noopener">View reference screenshot</a>
+        </li>
+        <li>
+          Upload the screenshot using any of the following:
+          <ul>
+            <li>Drag &amp; Drop</li>
+            <li>Manual Upload</li>
+            <li>Ctrl + V (Paste)</li>
+          </ul>
+        </li>
+        <li>Wait for Pulse.bot to finish reading the screenshot.</li>
+        <li>Select the correct trading system and enter the date of the first closed trade.</li>
+        <li>Example: <strong>2/18/2025</strong></li>
+        <li>Click &quot;Add Entry&quot;.</li>
+      </ol>
+
+      <p>If this is the only trading system, click:</p>
+      <p><strong>Generate Summary</strong></p>
+      <p>Then click:</p>
+      <p><strong>Copy to GHL</strong></p>
+      <p>Finally, paste the generated summary directly into the client's GHL Notes.</p>
+
+      <h3>For Multiple Systems</h3>
+      <p>Repeat the same process for every trading system.</p>
+      <p>Do NOT click Generate Summary until ALL systems have been added to the list.</p>
+      <p>Once every system has been added:</p>
+      <ul class="guide-list">
+        <li>Click Generate Summary</li>
+        <li>Click Copy to GHL</li>
+        <li>Paste the generated summary directly into GHL Notes.</li>
+      </ul>
+
+      <div class="guide-actions">
+        <button class="primary-button" id="closeGuideButton" type="button">Close</button>
+      </div>
     </div>
   </dialog>
 </body>
