@@ -108,28 +108,77 @@ async function processScreenshot(file) {
 
   try {
     if (!window.Tesseract) {
-      throw new Error("OCR library failed to load. Please check your connection and refresh.");
+      throw new Error("OCR library failed to load.");
     }
 
-    const result = await Tesseract.recognize(file, "eng", {
+    const processedImage = await preprocessImage(file);
+
+    let result = await Tesseract.recognize(processedImage, "eng", {
       logger: ({ status, progress }) => {
         const percent = Math.round((progress || 0) * 100);
         elements.ocrProgress.textContent = `${titleCase(status)} ${percent}%`;
-      }
+      },
+      tessedit_pageseg_mode: 6,
+      preserve_interword_spaces: "1"
     });
+
+    console.log("PREPROCESSED OCR");
+    console.log(result.data.text);
+
+    if ((result.data.text || "").length < 25) {
+      result = await Tesseract.recognize(file, "eng", {
+        tessedit_pageseg_mode: 6,
+        preserve_interword_spaces: "1"
+      });
+      console.log("RAW OCR");
+      console.log(result.data.text);
+    }
 
     state.ocrData = extractMetrics(result.data.text);
     updateMetricPreview();
     elements.ocrStatus.textContent = "OCR complete";
-    setMessage("Screenshot processed. Review the extracted values, then add the entry.", "success");
+    setMessage("Screenshot processed. Review the extracted values.", "success");
+
   } catch (error) {
+    console.error(error);
     state.ocrData = null;
     elements.ocrStatus.textContent = "OCR failed";
-    setMessage(error.message || "OCR failed. Please try a clearer screenshot.", "error");
+    setMessage(error.message || "OCR failed.", "error");
   } finally {
     setLoading(false);
     setButtonsDisabled(false);
   }
+}
+
+async function preprocessImage(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = 3;
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      const image = ctx.getImageData(0,0,canvas.width,canvas.height);
+      const d = image.data;
+      const contrast = 1.8;
+      const brightness = 12;
+
+      for (let i=0;i<d.length;i+=4){
+        let g = d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114;
+        g = (g-128)*contrast + 128 + brightness;
+        g = Math.max(0, Math.min(255,g));
+        d[i]=d[i+1]=d[i+2]=g;
+      }
+      ctx.putImageData(image,0,0);
+      canvas.toBlob(resolve);
+    };
+    img.src = URL.createObjectURL(file);
+  });
 }
 
 function showPreview(file) {
@@ -141,23 +190,37 @@ function showPreview(file) {
 }
 
 function extractMetrics(rawText) {
+
+  const money = rawText.match(/\d[\d,]*\.\d+\s?USD/g) || [];
+  const percent = rawText.match(/\d+(?:\.\d+)?\s?%/g) || [];
+
+  if (money.length >= 3 && percent.length >= 1) {
+    return {
+      balance: parseMoney(money[1]),
+      closedProfit: parseMoney(money[0]),
+      equity: parseMoney(money[2]),
+      growth: parsePercent(percent[0])
+    };
+  }
+
   const lines = normalizeOcrText(rawText);
   const balance = findMoneyValue(lines, ["balance"]);
-  const closedProfit = findMoneyValue(lines, ["profit/loss", "profit loss", "profitloss", "profit/l0ss", "profit"]);
+  const closedProfit = findMoneyValue(lines, ["profit/loss","profit loss","profit"]);
   const equity = findMoneyValue(lines, ["equity"], ["equity percentage"]);
   const growth = findPercentValue(lines, ["growth"]);
+
   const missing = [
     ["Balance", balance],
     ["Profit/Loss", closedProfit],
     ["Equity", equity],
     ["Growth", growth]
-  ].filter(([, value]) => value === null).map(([label]) => label);
+  ].filter(([,v])=>v===null).map(([l])=>l);
 
   if (missing.length) {
-    throw new Error(`Could not read ${missing.join(", ")} from this screenshot. Try a sharper crop or brighter screenshot.`);
+    throw new Error(`Could not read ${missing.join(", ")} from this screenshot.`);
   }
 
-  return { balance, closedProfit, equity, growth };
+  return {balance,closedProfit,equity,growth};
 }
 
 function normalizeOcrText(rawText) {
