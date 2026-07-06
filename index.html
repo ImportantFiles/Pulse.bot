@@ -9,15 +9,17 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
+  <script src="background.js" defer></script>
   <script src="script.js" defer></script>
 </head>
 <body>
   <button class="guide-button" id="guideButton" type="button">Guide</button>
 
   <div class="background-mark" aria-hidden="true"></div>
+  <canvas id="bgCanvas" aria-hidden="true"></canvas>
   <div class="page-shell">
     <header class="app-header">
-      <h1>Pulse.bot</h1>
+      <h1 id="appLogo">Pulse.bot</h1>
       <p>RCS Trading Performance Viewer</p>
     </header>
 
@@ -227,7 +229,7 @@ Growth % = ((Current Balance − Net Deposit) ÷ Net Deposit) × 100</pre>
         <li>Open STT and go to the Account Dashboard page.</li>
         <li>
           Take a screenshot of ONLY the Account Details section from STT.
-          <a href="account-details-reference.svg" target="_blank" rel="noopener">View reference screenshot</a>
+          <a href="account-details-reference.png" target="_blank" rel="noopener">View reference screenshot</a>
         </li>
         <li>
           Upload the screenshot using any of the following:

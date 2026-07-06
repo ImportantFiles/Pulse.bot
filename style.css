@@ -10,7 +10,7 @@
   --success: #94f3bf;
   --danger: #ff8b8b;
   --shadow: 0 30px 90px rgba(0, 0, 0, 0.58);
-  --font-display: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
 }
 
@@ -95,6 +95,42 @@ button:disabled {
   pointer-events: none;
 }
 
+#bgCanvas {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.pulse-toast {
+  position: fixed;
+  top: 22px;
+  left: 50%;
+  z-index: 999;
+  padding: 11px 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--panel-strong);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.88rem;
+  letter-spacing: 0.05em;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  transform: translate(-50%, -14px);
+  transition: opacity 260ms ease, transform 260ms ease;
+  pointer-events: none;
+}
+
+.pulse-toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 .page-shell {
   width: min(940px, calc(100% - 32px));
   margin: 0 auto;
@@ -124,6 +160,7 @@ button:disabled {
   line-height: 0.86;
   letter-spacing: 0.015em;
   text-shadow: 0 22px 58px rgba(255, 255, 255, 0.12);
+  user-select: none;
 }
 
 .app-header p:last-child {
