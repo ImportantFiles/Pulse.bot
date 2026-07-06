@@ -276,11 +276,11 @@ function showPreview(file) {
 function extractMetrics(rawText) {
   const lines = normalizeOcrText(rawText);
 
-  const balanceMatch = findMoneyValueAndRaw(lines, ["balance"]);
-  const closedProfitMatch = findMoneyValueAndRaw(lines, ["profit/loss", "profit loss", "profit"]);
-  const equityMatch = findMoneyValueAndRaw(lines, ["equity"], ["equity percentage"]);
-  const depositsMatch = findMoneyValueAndRaw(lines, ["deposits"]);
-  const withdrawalsMatch = findMoneyValueAndRaw(lines, ["withdrawals", "withdrawal"]);
+  const balanceMatch = findMoneyValueAndRaw(lines, ["balance"], [], "Balance");
+  const closedProfitMatch = findMoneyValueAndRaw(lines, ["profit/loss", "profit loss", "profit"], [], "Closed Profit");
+  const equityMatch = findMoneyValueAndRaw(lines, ["equity"], ["equity percentage"], "Equity");
+  const depositsMatch = findMoneyValueAndRaw(lines, ["deposits"], [], "Deposits");
+  const withdrawalsMatch = findMoneyValueAndRaw(lines, ["withdrawals", "withdrawal"], [], "Withdrawals");
 
   let balance = balanceMatch.value;
   let closedProfit = closedProfitMatch.value;
@@ -347,10 +347,10 @@ function findMoneyValue(lines, labels, excludedLabels = []) {
   return findMoneyValueAndRaw(lines, labels, excludedLabels).value;
 }
 
-function findMoneyValueAndRaw(lines, labels, excludedLabels = []) {
+function findMoneyValueAndRaw(lines, labels, excludedLabels = [], label = "Value") {
   const raw = findValueNearLabel(lines, labels, moneyPattern(), excludedLabels);
   return {
-    value: raw ? parseMoney(raw) : null,
+    value: raw ? parseMoney(raw, label) : null,
     raw
   };
 }
@@ -409,23 +409,32 @@ function isKnownMetricLabel(value) {
     .some((label) => normalized.includes(normalizeLabel(label)));
 }
 
-function parseMoney(value) {
-  const normalized = String(value || "")
+function parseMoney(value, label = "Value") {
+  const rawValue = String(value || "").trim();
+  const normalized = rawValue
     .replace(/\u2212/g, "-")
     .replace(/\u2013/g, "-")
     .replace(/\u2014/g, "-");
 
-  const negative = normalized.includes("(") || normalized.includes("-");
-  const numeric = Number(
-    normalized
-      .replace(/USD/gi, "")
-      .replace(/[$,\s()]/g, "")
-      .replace(/-/g, "")
-  );
+  const isNegative = normalized.includes("(") || /^-/.test(normalized);
+  const cleanedValue = normalized
+    .replace(/\(/g, "")
+    .replace(/\)/g, "")
+    .replace(/\$/g, "")
+    .replace(/USD/gi, "")
+    .replace(/,/g, "")
+    .replace(/\s+/g, "")
+    .trim();
 
-  if (Number.isNaN(numeric)) return null;
+  const numericValue = parseFloat(cleanedValue.replace(/-/g, ""));
+  const parsedNumber = Number.isNaN(numericValue) ? null : (isNegative ? -numericValue : numericValue);
 
-  return negative ? -numeric : numeric;
+  console.log(`[Currency Parse] ${label} Raw OCR value:`, rawValue);
+  console.log(`[Currency Parse] ${label} Cleaned string:`, cleanedValue);
+  console.log(`[Currency Parse] ${label} Parsed number:`, parsedNumber);
+  console.log(`[Currency Parse] ${label} Displayed value:`, parsedNumber === null ? null : formatMoney(parsedNumber));
+
+  return parsedNumber;
 }
 
 function parsePercent(value) {
