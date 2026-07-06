@@ -164,6 +164,66 @@
     <div class="guide-content">
       <h2 id="guideTitle">How to Use Pulse.bot</h2>
 
+      <details class="calc-reference">
+        <summary class="calc-reference-summary">
+          <span class="calc-reference-icon" aria-hidden="true">📘</span>
+          <span class="calc-reference-title">Calculation Reference</span>
+          <span class="calc-reference-caret" aria-hidden="true"></span>
+        </summary>
+
+        <div class="calc-reference-body">
+          <p class="calc-reference-intro">
+            Quick reference for the values Pulse.bot calculates rather than reads directly from the screenshot.
+          </p>
+
+          <div class="calc-card">
+            <h4>Growth %</h4>
+            <pre class="calc-formula">Net Deposit = Total Deposit − Total Withdrawal
+
+Growth % = ((Current Balance − Net Deposit) ÷ Net Deposit) × 100</pre>
+            <p>Shows the account's overall gain or loss based on the client's Net Deposit, taking withdrawals into account before calculating the percentage return.</p>
+          </div>
+
+          <div class="calc-card">
+            <h4>Floating P/L</h4>
+            <pre class="calc-formula">Floating P/L = Equity − Current Balance</pre>
+            <p>Represents the unrealized profit or loss from currently open trades.</p>
+          </div>
+
+          <div class="calc-card">
+            <h4>Track Record</h4>
+            <pre class="calc-formula">Track Record = First Closed Trade Date → Today's Date</pre>
+            <p>Represents the total number of days the trading account has been actively trading.</p>
+          </div>
+
+          <div class="calc-card">
+            <h4>OCR Extraction</h4>
+            <p>These values are extracted directly from the STT Account Details screenshot and validated before any calculations are performed:</p>
+            <ul class="calc-list">
+              <li>Current Balance</li>
+              <li>Equity</li>
+              <li>Closed Profit</li>
+              <li>Total Deposit</li>
+              <li>Total Withdrawal</li>
+            </ul>
+          </div>
+
+          <div class="calc-card">
+            <h4>Important Notes</h4>
+            <ul class="calc-list">
+              <li>Growth is calculated and is no longer read from the screenshot.</li>
+              <li>Net Deposit is calculated as Total Deposit − Total Withdrawal.</li>
+              <li>Floating P/L is always calculated using Equity and Current Balance.</li>
+              <li>Track Record is calculated using the First Closed Trade Date entered by the user.</li>
+              <li>Positive and negative values are preserved during OCR and calculations.</li>
+              <li>All percentages are rounded to two decimal places.</li>
+              <li>Currency values retain proper formatting.</li>
+              <li>If a required value can't be extracted or is invalid, Pulse.bot displays a clear warning instead of generating an incorrect calculation.</li>
+            </ul>
+          </div>
+        </div>
+      </details>
+
       <ol class="guide-steps">
         <li>Open STT and go to the Account Dashboard page.</li>
         <li>

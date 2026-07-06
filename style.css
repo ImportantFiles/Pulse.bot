@@ -584,6 +584,118 @@ tbody tr {
   font-size: 1.8rem;
 }
 
+.calc-reference {
+  margin: 0 0 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.calc-reference[open] {
+  padding-bottom: 4px;
+}
+
+.calc-reference-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text);
+  font-weight: 700;
+  user-select: none;
+}
+
+.calc-reference-summary::-webkit-details-marker {
+  display: none;
+}
+
+.calc-reference-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.calc-reference-title {
+  flex: 1;
+  font-size: 0.98rem;
+}
+
+.calc-reference-caret {
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 160ms ease;
+  flex-shrink: 0;
+}
+
+.calc-reference[open] .calc-reference-caret {
+  transform: rotate(45deg);
+}
+
+.calc-reference-body {
+  padding: 4px 16px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.calc-reference-intro {
+  margin: 14px 0;
+}
+
+.calc-card {
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-strong);
+}
+
+.calc-card:last-child {
+  margin-bottom: 0;
+}
+
+.calc-card h4 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 1.12rem;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.calc-card p {
+  margin: 8px 0 0;
+}
+
+.calc-card p:first-of-type {
+  margin-top: 0;
+}
+
+.calc-formula {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--success);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+.calc-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.calc-list li {
+  margin: 6px 0;
+}
+
 .guide-content h3 {
   margin: 24px 0 10px;
   font-family: var(--font-display);
@@ -702,6 +814,22 @@ tbody tr {
 
   .guide-content {
     padding: 22px 18px;
+  }
+
+  .calc-reference-summary {
+    padding: 12px 14px;
+  }
+
+  .calc-reference-body {
+    padding: 4px 14px 14px;
+  }
+
+  .calc-card {
+    padding: 12px 14px;
+  }
+
+  .calc-formula {
+    font-size: 0.8rem;
   }
 
   .section-heading,
