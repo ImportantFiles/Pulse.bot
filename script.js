@@ -235,7 +235,7 @@ async function preprocessImage(file) {
 }
 
 function calculateGrowthFromAccountInfo(ocrData) {
-  const withdrawals = ocrData.withdrawals ?? 0;
+  const withdrawals = Math.abs(ocrData.withdrawals ?? 0);
   const netDeposit = ocrData.deposits === null ? null : ocrData.deposits - withdrawals;
 
   if (ocrData.balance === null || netDeposit === null || netDeposit === 0) {
