@@ -325,7 +325,7 @@ function normalizeOcrText(rawText) {
 }
 
 function findAllMoneyValues(text) {
-  return Array.from(text.matchAll(/[-+]?(?:\()?\s*\$?\s*(?:USD\s*)?\d{1,3}(?:,\d{3})*(?:\.\d+)?\)?(?:\s*USD)?/gi)).map((match) => match[0].trim());
+  return Array.from(text.matchAll(/[-+]?(?:\()?\s*\$?\s*(?:USD\s*)?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?\)?(?:\s*USD)?/gi)).map((match) => match[0].trim());
 }
 
 function logOcrCalculation(ocrData) {
@@ -395,7 +395,7 @@ const nextLineValue =
 }
 
 function moneyPattern() {
-  return /[-+]?(?:\()?\s*\$?\s*(?:USD\s*)?\d{1,3}(?:,\d{3})*(?:\.\d+)?\)?(?:\s*USD)?/i;
+  return /[-+]?(?:\()?\s*\$?\s*(?:USD\s*)?\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?\)?(?:\s*USD)?/i;
 }
 
 function percentPattern() {
@@ -412,6 +412,22 @@ function isKnownMetricLabel(value) {
     .some((label) => normalized.includes(normalizeLabel(label)));
 }
 
+function normalizeNumericSeparators(value) {
+  if (!/[.,]/.test(value)) return value;
+
+  const lastSeparatorIndex = Math.max(value.lastIndexOf("."), value.lastIndexOf(","));
+  const decimalPart = value.slice(lastSeparatorIndex + 1);
+  const integerPart = value.slice(0, lastSeparatorIndex).replace(/[.,]/g, "");
+
+  // A trailing group of 1-2 digits is the decimal part; anything longer (e.g. a
+  // ",902" thousands group) is just another grouping separator, not a decimal point.
+  if (decimalPart.length > 0 && decimalPart.length <= 2) {
+    return `${integerPart}.${decimalPart}`;
+  }
+
+  return `${integerPart}${decimalPart}`;
+}
+
 function parseMoney(value, label = "Value") {
   const rawValue = String(value || "").trim();
   const normalized = rawValue
@@ -425,11 +441,11 @@ function parseMoney(value, label = "Value") {
     .replace(/\)/g, "")
     .replace(/\$/g, "")
     .replace(/USD/gi, "")
-    .replace(/,/g, "")
     .replace(/\s+/g, "")
+    .replace(/^-/, "")
     .trim();
 
-  const numericValue = parseFloat(cleanedValue.replace(/-/g, ""));
+  const numericValue = parseFloat(normalizeNumericSeparators(cleanedValue));
   const parsedNumber = Number.isNaN(numericValue) ? null : (isNegative ? -numericValue : numericValue);
 
   console.log(`[Currency Parse] ${label} Raw OCR value:`, rawValue);
