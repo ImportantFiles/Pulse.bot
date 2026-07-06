@@ -44,6 +44,16 @@ const metricFields = {
   growth: elements.growthValue
 };
 
+const AI_EXTRACTION_PROMPT = `
+IMPORTANT:
+- Copy all values exactly as they appear in the screenshot.
+- Never infer whether Growth is positive or negative.
+- Only include a minus sign if it is visibly present.
+- If the Growth text is green and no minus sign is visible, return a positive percentage.
+- Preserve all numeric formatting exactly as shown.
+- Do not calculate or modify the Growth value.
+`.trim();
+
 document.addEventListener("DOMContentLoaded", initializeApp);
 
 function initializeApp() {
@@ -174,7 +184,8 @@ async function processScreenshot(file) {
     }
 
     state.ocrData = extractMetrics(result.data.text);
-    state.ocrData.growth = await refineGrowthValue(file, processedImage, result, state.ocrData.growth);
+    state.ocrData = await refineGrowthValue(processedImage, result, state.ocrData);
+    logGrowthExtraction(state.ocrData);
     updateMetricPreview();
     elements.ocrStatus.textContent = "OCR complete";
     setMessage("Screenshot processed. Review the extracted values.", "success");
@@ -233,25 +244,44 @@ async function preprocessImage(file) {
   });
 }
 
-async function refineGrowthValue(originalFile, processedImage, result, currentGrowth) {
+async function refineGrowthValue(processedImage, result, ocrData) {
+  const currentGrowth = ocrData.growth;
+  let rawGrowth = ocrData.growthRaw || "";
+  let cleanedGrowth = ocrData.growthText || formatPercent(currentGrowth);
+
   try {
     const crop = await cropAroundGrowth(processedImage, result);
     if (crop) {
-      const cropText = await recognizeGrowthCrop(crop);
-      const cropGrowth = extractGrowthFromText(cropText);
+      const cropResult = await recognizeGrowthCrop(crop);
+      const cropGrowth = extractGrowthFromText(cropResult.data.text || "", cropResult.data.confidence);
 
-      if (cropGrowth !== null && (cropGrowth < 0 || currentGrowth === null)) {
-        return cropGrowth;
+      if (cropGrowth && cropGrowth.value !== null) {
+        rawGrowth = cropGrowth.raw;
+        cleanedGrowth = cleanGrowthText(cropGrowth.raw, shouldKeepGrowthMinus(cropGrowth.meta, cropResult));
+        return {
+          ...ocrData,
+          growth: parsePercent(cleanedGrowth),
+          growthRaw: rawGrowth,
+          growthText: cleanedGrowth
+        };
       }
     }
 
-    if (currentGrowth > 0 && await isGrowthValueRed(originalFile, processedImage, result)) {
-      return -Math.abs(currentGrowth);
-    }
-
-    return currentGrowth;
+    cleanedGrowth = cleanGrowthText(cleanedGrowth, shouldKeepGrowthMinus(ocrData.growthMeta, result));
+    return {
+      ...ocrData,
+      growth: parsePercent(cleanedGrowth),
+      growthRaw: rawGrowth,
+      growthText: cleanedGrowth
+    };
   } catch {
-    return currentGrowth;
+    cleanedGrowth = cleanGrowthText(cleanedGrowth, shouldKeepGrowthMinus(ocrData.growthMeta, result));
+    return {
+      ...ocrData,
+      growth: parsePercent(cleanedGrowth),
+      growthRaw: rawGrowth,
+      growthText: cleanedGrowth
+    };
   }
 }
 
@@ -262,7 +292,7 @@ async function recognizeGrowthCrop(image) {
     preserve_interword_spaces: "1"
   });
 
-  return result.data.text || "";
+  return result;
 }
 
 async function cropAroundGrowth(image, result) {
@@ -287,44 +317,6 @@ async function cropAroundGrowth(image, result) {
   return new Promise((resolve) => canvas.toBlob(resolve));
 }
 
-async function isGrowthValueRed(originalFile, processedImage, result) {
-  const growthWord = findGrowthWord(result);
-  if (!growthWord) return false;
-
-  const [originalBitmap, processedBitmap] = await Promise.all([
-    createImageBitmap(originalFile),
-    createImageBitmap(processedImage)
-  ]);
-  const scaleX = originalBitmap.width / processedBitmap.width;
-  const scaleY = originalBitmap.height / processedBitmap.height;
-  const { x0, y1 } = growthWord.bbox;
-  const sx = Math.max(0, Math.floor((x0 * scaleX) - 8));
-  const sy = Math.max(0, Math.floor((y1 * scaleY) + 2));
-  const sw = Math.min(originalBitmap.width - sx, 170);
-  const sh = Math.min(originalBitmap.height - sy, 54);
-  const canvas = document.createElement("canvas");
-  canvas.width = sw;
-  canvas.height = sh;
-  const ctx = canvas.getContext("2d");
-
-  ctx.drawImage(originalBitmap, sx, sy, sw, sh, 0, 0, sw, sh);
-
-  const { data } = ctx.getImageData(0, 0, sw, sh);
-  let redPixels = 0;
-
-  for (let i = 0; i < data.length; i += 4) {
-    const red = data[i];
-    const green = data[i + 1];
-    const blue = data[i + 2];
-
-    if (red > 130 && red > green * 1.35 && red > blue * 1.25 && green < 145) {
-      redPixels += 1;
-    }
-  }
-
-  return redPixels >= 12;
-}
-
 function findGrowthWord(result) {
   return (result.data.words || [])
     .find((word) => /growth/i.test(word.text || "") && word.bbox);
@@ -344,28 +336,8 @@ function extractMetrics(rawText) {
   let balance = findMoneyValue(lines, ["balance"]);
   let closedProfit = findMoneyValue(lines, ["profit/loss","profit loss","profit"]);
   let equity = findMoneyValue(lines, ["equity"], ["equity percentage"]);
-  let growth = null;
-
-for (let i = 0; i < lines.length; i++) {
-
-    if (!/growth/i.test(lines[i])) continue;
-
-    // kunin ang susunod na 3 lines
-    const block = lines.slice(i, i + 4).join(" ");
-
-    // check kung may minus bago ang percent
-    const m = block.match(/([-−–—]?)\s*(\d+(?:\.\d+)?)\s*%/);
-
-    if (m) {
-
-        growth = parseFloat(m[2]);
-
-        if (m[1])
-            growth *= -1;
-
-        break;
-    }
-}
+  let growthCandidate = extractGrowthFromText(rawText);
+  let growth = growthCandidate ? growthCandidate.value : null;
 
   if ([balance, closedProfit, equity, growth].some(v => v === null)) {
     const money = rawText.match(/[-−–—]?\d[\d,]*\.\d+\s?USD/g) || [];
@@ -373,7 +345,10 @@ for (let i = 0; i < lines.length; i++) {
     if (balance === null && money[1]) balance = parseMoney(money[1]);
     if (closedProfit === null && money[0]) closedProfit = parseMoney(money[0]);
     if (equity === null && money[2]) equity = parseMoney(money[2]);
-    if (growth === null && percent[0]) growth = parsePercent(percent[0]);
+    if (growth === null && percent[0]) {
+      growthCandidate = createGrowthCandidate(percent[0]);
+      growth = growthCandidate.value;
+    }
   }
 
   const missing = [["Balance",balance],["Profit/Loss",closedProfit],["Equity",equity],["Growth",growth]]
@@ -381,7 +356,15 @@ for (let i = 0; i < lines.length; i++) {
 
   if (missing.length) throw new Error(`Could not read ${missing.join(", ")} from this screenshot.`);
 
-  return { balance, closedProfit, equity, growth };
+  return {
+    balance,
+    closedProfit,
+    equity,
+    growth,
+    growthRaw: growthCandidate.raw,
+    growthText: growthCandidate.text,
+    growthMeta: growthCandidate.meta
+  };
 }
 
 function normalizeOcrText(rawText) {
@@ -392,20 +375,63 @@ function normalizeOcrText(rawText) {
     .filter(Boolean);
 }
 
-function extractGrowthFromText(rawText) {
+function extractGrowthFromText(rawText, confidence = null) {
   const lines = normalizeOcrText(rawText);
 
   for (let i = 0; i < lines.length; i += 1) {
     if (!/growth/i.test(lines[i])) continue;
 
     const block = lines.slice(i, i + 4).join(" ");
-    const match = block.match(percentPattern());
+    const match = block.match(growthPercentPattern());
 
-    if (match) return parsePercent(match[0]);
+    if (match) return createGrowthCandidate(match[0], confidence);
   }
 
-  const percent = rawText.match(percentPattern());
-  return percent ? parsePercent(percent[0]) : null;
+  const percent = rawText.match(growthPercentPattern());
+  return percent ? createGrowthCandidate(percent[0], confidence) : null;
+}
+
+function createGrowthCandidate(rawValue, confidence = null) {
+  const raw = rawValue.trim();
+  const hasLeadingMinus = hasGrowthMinus(raw);
+  const text = cleanGrowthText(raw, hasLeadingMinus);
+
+  return {
+    raw,
+    text,
+    value: parsePercent(text),
+    meta: {
+      hasLeadingMinus,
+      confidence
+    }
+  };
+}
+
+function cleanGrowthText(rawValue, keepMinus) {
+  const normalized = String(rawValue || "")
+    .trim()
+    .replace(/\u2212|\u2013|\u2014/g, "-");
+
+  if (keepMinus) return normalized;
+
+  return normalized.replace(/^[-\s]+(?=\(?\d)/, "");
+}
+
+function hasGrowthMinus(value) {
+  return /^[-\u2212\u2013\u2014]\s*\(?\d/.test(String(value || "").trim());
+}
+
+function shouldKeepGrowthMinus(candidateMeta, result) {
+  if (!candidateMeta?.hasLeadingMinus) return false;
+
+  const confidence = candidateMeta.confidence ?? result?.data?.confidence ?? 0;
+  return confidence >= 70;
+}
+
+function logGrowthExtraction(ocrData) {
+  console.log("Raw OCR Growth:", ocrData.growthRaw);
+  console.log("Cleaned Growth:", ocrData.growthText);
+  console.log("Final Growth stored in the form:", formatPercent(ocrData.growth, ocrData.growthText));
 }
 
 function findMoneyValue(lines, labels, excludedLabels = []) {
@@ -459,6 +485,10 @@ function percentPattern() {
 
 function normalizeLabel(value) {
   return value.toLowerCase().replace(/[^a-z0-9/%]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function growthPercentPattern() {
+  return /[-\u2212\u2013\u2014+]?\s*\(?\d{1,3}(?:,\d{3})*(?:\.\d+)?\)?\s*%/i;
 }
 
 function isKnownMetricLabel(value) {
@@ -559,6 +589,7 @@ function buildEntry(firstCloseDate) {
     equity,
     floatingPL: equity - balance,
     growth: state.ocrData.growth,
+    growthText: state.ocrData.growthText,
     trackRecord: calculateTrackRecord(firstCloseDate)
   };
 }
@@ -603,7 +634,7 @@ function renderEntries() {
       <td>${formatMoney(entry.closedProfit)}</td>
       <td>${formatMoney(entry.equity)}</td>
       <td>${formatMoney(entry.floatingPL)}</td>
-      <td>${formatPercent(entry.growth)}</td>
+      <td>${formatPercent(entry.growth, entry.growthText)}</td>
       <td>${escapeHtml(entry.trackRecord)}</td>
       <td>
         <div class="row-actions">
@@ -638,7 +669,8 @@ function handleEntryAction(event) {
       balance: entry.balance,
       closedProfit: entry.closedProfit,
       equity: entry.equity,
-      growth: entry.growth
+      growth: entry.growth,
+      growthText: entry.growthText
     };
     state.screenshotFile = new File(["edited"], "existing-entry.png", { type: "image/png" });
     elements.systemSelect.value = entry.system;
@@ -682,7 +714,7 @@ function renderSummaryCard(entry, open) {
     ["Closed Profit", formatMoney(entry.closedProfit)],
     ["Equity", formatMoney(entry.equity)],
     ["Floating P/L", formatMoney(entry.floatingPL)],
-    ["Growth", formatPercent(entry.growth)],
+    ["Growth", formatPercent(entry.growth, entry.growthText)],
     ["Track Record", entry.trackRecord]
   ];
 
@@ -691,7 +723,7 @@ function renderSummaryCard(entry, open) {
       <button class="summary-toggle" type="button" aria-label="Toggle ${escapeHtml(entry.system)} summary">
         <strong><span data-indicator>${open ? "▼" : "▶"}</span> ${escapeHtml(entry.system)}</strong>
         <span>${formatMoney(entry.balance)}</span>
-        <span>${formatPercent(entry.growth)}</span>
+        <span>${formatPercent(entry.growth, entry.growthText)}</span>
       </button>
       <div class="summary-content">
         <div class="summary-inner">
@@ -722,7 +754,7 @@ function buildPlainTextSummary() {
     `Closed Profit: ${formatMoney(entry.closedProfit)}`,
     `Equity: ${formatMoney(entry.equity)}`,
     `Floating P/L: ${formatMoney(entry.floatingPL)}`,
-    `Growth: ${formatPercent(entry.growth)}`,
+    `Growth: ${formatPercent(entry.growth, entry.growthText)}`,
     `Track Record: ${entry.trackRecord}`
   ].join("\n")).join("\n\n───────────────────\n\n");
 }
@@ -767,7 +799,7 @@ function updateMetricPreview() {
   metricFields.balance.textContent = data ? formatMoney(data.balance) : "--";
   metricFields.closedProfit.textContent = data ? formatMoney(data.closedProfit) : "--";
   metricFields.equity.textContent = data ? formatMoney(data.equity) : "--";
-  metricFields.growth.textContent = data ? formatPercent(data.growth) : "--";
+  metricFields.growth.textContent = data ? formatPercent(data.growth, data.growthText) : "--";
 }
 
 function setLoading(active, text = "Reading screenshot...") {
@@ -797,7 +829,8 @@ function formatMoney(value) {
   return value < 0 ? `-${formatted}` : formatted;
 }
 
-function formatPercent(value) {
+function formatPercent(value, displayValue = null) {
+  if (displayValue) return displayValue;
   return `${value.toFixed(2)}%`;
 }
 
