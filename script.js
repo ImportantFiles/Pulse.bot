@@ -290,9 +290,9 @@ function extractMetrics(rawText) {
 
   if ([balance, closedProfit, equity].some((value) => value === null)) {
     const money = findAllMoneyValues(rawText);
-    if (balance === null && money[1]) balance = parseMoney(money[1]);
-    if (closedProfit === null && money[0]) closedProfit = parseMoney(money[0]);
-    if (equity === null && money[2]) equity = parseMoney(money[2]);
+    if (balance === null && money[1]) balance = parseMoney(money[1], "Balance (fallback)");
+    if (closedProfit === null && money[0]) closedProfit = parseMoney(money[0], "Closed Profit (fallback)");
+    if (equity === null && money[2]) equity = parseMoney(money[2], "Equity (fallback)");
   }
 
   const missing = [["Balance", balance], ["Profit/Loss", closedProfit], ["Equity", equity]]
@@ -322,7 +322,7 @@ function normalizeOcrText(rawText) {
 }
 
 function findAllMoneyValues(text) {
-  return Array.from(text.matchAll(/[-+]?(?:\()?\s*\$?\s*(?:USD\s*)?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?\)?(?:\s*USD)?/gi)).map((match) => match[0].trim());
+  return Array.from(text.matchAll(/[-+]?(?:\()?\s*\$?\s*(?:USD\s*)?\d{1,3}(?:,\d{3})*(?:\.\d+)?\)?(?:\s*USD)?/gi)).map((match) => match[0].trim());
 }
 
 function logOcrCalculation(ocrData) {
@@ -392,7 +392,7 @@ const nextLineValue =
 }
 
 function moneyPattern() {
-  return /[-+]?(?:\()?\s*\$?\s*(?:USD\s*)?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?\)?(?:\s*USD)?/i;
+  return /[-+]?(?:\()?\s*\$?\s*(?:USD\s*)?\d{1,3}(?:,\d{3})*(?:\.\d+)?\)?(?:\s*USD)?/i;
 }
 
 function percentPattern() {
@@ -431,8 +431,8 @@ function parseMoney(value, label = "Value") {
 
   console.log(`[Currency Parse] ${label} Raw OCR value:`, rawValue);
   console.log(`[Currency Parse] ${label} Cleaned string:`, cleanedValue);
-  console.log(`[Currency Parse] ${label} Parsed number:`, parsedNumber);
-  console.log(`[Currency Parse] ${label} Displayed value:`, parsedNumber === null ? null : formatMoney(parsedNumber));
+  console.log(`[Currency Parse] ${label} Parsed float:`, parsedNumber);
+  console.log(`[Currency Parse] ${label} Final stored value:`, parsedNumber === null ? null : parsedNumber);
 
   return parsedNumber;
 }
@@ -776,6 +776,5 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
-
 
 
