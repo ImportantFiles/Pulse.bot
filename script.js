@@ -174,8 +174,7 @@ async function processScreenshot(file) {
     }
 
     state.ocrData = extractMetrics(result.data.text);
-    state.ocrData = calculateGrowthFromAccountInfo(state.ocrData);
-    logOcrCalculation(state.ocrData);
+    state.ocrData.growth = await refineGrowthValue(file, processedImage, result, state.ocrData.growth);
     updateMetricPreview();
     elements.ocrStatus.textContent = "OCR complete";
     setMessage("Screenshot processed. Review the extracted values.", "success");
@@ -234,35 +233,101 @@ async function preprocessImage(file) {
   });
 }
 
-function calculateGrowthFromAccountInfo(ocrData) {
-  if (ocrData.balance === null || ocrData.deposits === null || ocrData.deposits === 0) {
-    console.warn("Growth not calculated: Balance or Deposits is missing, or Deposits is zero.", {
-      balance: ocrData.balance,
-      deposits: ocrData.deposits
-    });
+async function refineGrowthValue(originalFile, processedImage, result, currentGrowth) {
+  try {
+    const crop = await cropAroundGrowth(processedImage, result);
+    if (crop) {
+      const cropText = await recognizeGrowthCrop(crop);
+      const cropGrowth = extractGrowthFromText(cropText);
 
-    return {
-      ...ocrData,
-      netTradingBalance: null,
-      growth: null,
-      growthText: ""
-    };
+      if (cropGrowth !== null && (cropGrowth < 0 || currentGrowth === null)) {
+        return cropGrowth;
+      }
+    }
+
+    if (currentGrowth > 0 && await isGrowthValueRed(originalFile, processedImage, result)) {
+      return -Math.abs(currentGrowth);
+    }
+
+    return currentGrowth;
+  } catch {
+    return currentGrowth;
   }
-
-  const withdrawals = ocrData.withdrawals ?? 0;
-  const netTradingBalance = ocrData.balance - withdrawals;
-  const growth = roundToTwo(((netTradingBalance - ocrData.deposits) / ocrData.deposits) * 100);
-
-  return {
-    ...ocrData,
-    netTradingBalance,
-    growth,
-    growthText: formatPercent(growth)
-  };
 }
 
-function roundToTwo(value) {
-  return Number(value.toFixed(2));
+async function recognizeGrowthCrop(image) {
+  const result = await Tesseract.recognize(image, "eng", {
+    tessedit_pageseg_mode: 7,
+    tessedit_char_whitelist: "Growthgrowth0123456789.,%-−–—() ",
+    preserve_interword_spaces: "1"
+  });
+
+  return result.data.text || "";
+}
+
+async function cropAroundGrowth(image, result) {
+  const growthWord = findGrowthWord(result);
+
+  if (!growthWord) return null;
+
+  const bitmap = await createImageBitmap(image);
+  const { x0, y0, x1, y1 } = growthWord.bbox;
+  const paddingX = 70;
+  const paddingY = 80;
+  const sx = Math.max(0, x0 - paddingX);
+  const sy = Math.max(0, y0 - paddingY);
+  const sw = Math.min(bitmap.width - sx, Math.max(260, x1 - sx + 360));
+  const sh = Math.min(bitmap.height - sy, Math.max(130, y1 - sy + 170));
+  const canvas = document.createElement("canvas");
+  canvas.width = sw;
+  canvas.height = sh;
+  const ctx = canvas.getContext("2d");
+
+  ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+  return new Promise((resolve) => canvas.toBlob(resolve));
+}
+
+async function isGrowthValueRed(originalFile, processedImage, result) {
+  const growthWord = findGrowthWord(result);
+  if (!growthWord) return false;
+
+  const [originalBitmap, processedBitmap] = await Promise.all([
+    createImageBitmap(originalFile),
+    createImageBitmap(processedImage)
+  ]);
+  const scaleX = originalBitmap.width / processedBitmap.width;
+  const scaleY = originalBitmap.height / processedBitmap.height;
+  const { x0, y1 } = growthWord.bbox;
+  const sx = Math.max(0, Math.floor((x0 * scaleX) - 8));
+  const sy = Math.max(0, Math.floor((y1 * scaleY) + 2));
+  const sw = Math.min(originalBitmap.width - sx, 170);
+  const sh = Math.min(originalBitmap.height - sy, 54);
+  const canvas = document.createElement("canvas");
+  canvas.width = sw;
+  canvas.height = sh;
+  const ctx = canvas.getContext("2d");
+
+  ctx.drawImage(originalBitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+
+  const { data } = ctx.getImageData(0, 0, sw, sh);
+  let redPixels = 0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const red = data[i];
+    const green = data[i + 1];
+    const blue = data[i + 2];
+
+    if (red > 130 && red > green * 1.35 && red > blue * 1.25 && green < 145) {
+      redPixels += 1;
+    }
+  }
+
+  return redPixels >= 12;
+}
+
+function findGrowthWord(result) {
+  return (result.data.words || [])
+    .find((word) => /growth/i.test(word.text || "") && word.bbox);
 }
 
 function showPreview(file) {
@@ -276,41 +341,47 @@ function showPreview(file) {
 function extractMetrics(rawText) {
   const lines = normalizeOcrText(rawText);
 
-  const balanceMatch = findMoneyValueAndRaw(lines, ["balance"]);
-  const closedProfitMatch = findMoneyValueAndRaw(lines, ["profit/loss", "profit loss", "profit"]);
-  const equityMatch = findMoneyValueAndRaw(lines, ["equity"], ["equity percentage"]);
-  const depositsMatch = findMoneyValueAndRaw(lines, ["deposits"]);
-  const withdrawalsMatch = findMoneyValueAndRaw(lines, ["withdrawals", "withdrawal"]);
+  let balance = findMoneyValue(lines, ["balance"]);
+  let closedProfit = findMoneyValue(lines, ["profit/loss","profit loss","profit"]);
+  let equity = findMoneyValue(lines, ["equity"], ["equity percentage"]);
+  let growth = null;
 
-  let balance = balanceMatch.value;
-  let closedProfit = closedProfitMatch.value;
-  let equity = equityMatch.value;
-  let deposits = depositsMatch.value;
-  let withdrawals = withdrawalsMatch.value;
+for (let i = 0; i < lines.length; i++) {
 
-  if ([balance, closedProfit, equity].some((value) => value === null)) {
-    const money = findAllMoneyValues(rawText);
+    if (!/growth/i.test(lines[i])) continue;
+
+    // kunin ang susunod na 3 lines
+    const block = lines.slice(i, i + 4).join(" ");
+
+    // check kung may minus bago ang percent
+    const m = block.match(/([-−–—]?)\s*(\d+(?:\.\d+)?)\s*%/);
+
+    if (m) {
+
+        growth = parseFloat(m[2]);
+
+        if (m[1])
+            growth *= -1;
+
+        break;
+    }
+}
+
+  if ([balance, closedProfit, equity, growth].some(v => v === null)) {
+    const money = rawText.match(/[-−–—]?\d[\d,]*\.\d+\s?USD/g) || [];
+    const percent = rawText.match(/[-−–—]?\d+(?:\.\d+)?\s?%/g) || [];
     if (balance === null && money[1]) balance = parseMoney(money[1]);
     if (closedProfit === null && money[0]) closedProfit = parseMoney(money[0]);
     if (equity === null && money[2]) equity = parseMoney(money[2]);
+    if (growth === null && percent[0]) growth = parsePercent(percent[0]);
   }
 
-  const missing = [["Balance", balance], ["Profit/Loss", closedProfit], ["Equity", equity]]
-    .filter(([, value]) => value === null)
-    .map(([label]) => label);
+  const missing = [["Balance",balance],["Profit/Loss",closedProfit],["Equity",equity],["Growth",growth]]
+    .filter(([,v])=>v===null).map(([k])=>k);
 
   if (missing.length) throw new Error(`Could not read ${missing.join(", ")} from this screenshot.`);
 
-  return {
-    balance,
-    closedProfit,
-    equity,
-    deposits,
-    withdrawals,
-    rawBalance: balanceMatch.raw,
-    rawDeposits: depositsMatch.raw,
-    rawWithdrawals: withdrawalsMatch.raw
-  };
+  return { balance, closedProfit, equity, growth };
 }
 
 function normalizeOcrText(rawText) {
@@ -321,38 +392,25 @@ function normalizeOcrText(rawText) {
     .filter(Boolean);
 }
 
-function findAllMoneyValues(text) {
-  return Array.from(text.matchAll(/[-+]?(?:\()?\s*\$?\s*(?:USD\s*)?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?\)?(?:\s*USD)?/gi)).map((match) => match[0].trim());
-}
+function extractGrowthFromText(rawText) {
+  const lines = normalizeOcrText(rawText);
 
-function logOcrCalculation(ocrData) {
-  console.log("Raw OCR Balance:", ocrData?.rawBalance ?? null);
-  console.log("Raw OCR Deposits:", ocrData?.rawDeposits ?? null);
-  console.log("Raw OCR Withdrawals:", ocrData?.rawWithdrawals ?? null);
-  console.log("Parsed Balance:", ocrData?.balance ?? null);
-  console.log("Parsed Deposits:", ocrData?.deposits ?? null);
-  console.log("Parsed Withdrawals:", ocrData?.withdrawals ?? null);
-  console.log("Net Trading Balance:", ocrData?.netTradingBalance ?? null);
-  console.log("Calculated Growth:", ocrData?.growth ?? null);
-  console.log("Final Entry Object:", {
-    balance: ocrData?.balance ?? null,
-    deposits: ocrData?.deposits ?? null,
-    withdrawals: ocrData?.withdrawals ?? null,
-    growth: ocrData?.growth ?? null,
-    growthText: ocrData?.growthText ?? ""
-  });
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!/growth/i.test(lines[i])) continue;
+
+    const block = lines.slice(i, i + 4).join(" ");
+    const match = block.match(percentPattern());
+
+    if (match) return parsePercent(match[0]);
+  }
+
+  const percent = rawText.match(percentPattern());
+  return percent ? parsePercent(percent[0]) : null;
 }
 
 function findMoneyValue(lines, labels, excludedLabels = []) {
-  return findMoneyValueAndRaw(lines, labels, excludedLabels).value;
-}
-
-function findMoneyValueAndRaw(lines, labels, excludedLabels = []) {
-  const raw = findValueNearLabel(lines, labels, moneyPattern(), excludedLabels);
-  return {
-    value: raw ? parseMoney(raw) : null,
-    raw
-  };
+  const value = findValueNearLabel(lines, labels, moneyPattern(), excludedLabels);
+  return value ? parseMoney(value) : null;
 }
 
 function findPercentValue(lines, labels, excludedLabels = []) {
@@ -392,7 +450,7 @@ const nextLineValue =
 }
 
 function moneyPattern() {
-  return /[-+]?(?:\()?\s*\$?\s*(?:USD\s*)?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?\)?(?:\s*USD)?/i;
+  return /[-+]?\(?\$?\s?\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?\)?(?:\s?USD)?|[-+]?\(?\$?\s?\d+(?:\.\d{1,2})?\)?(?:\s?USD)?/i;
 }
 
 function percentPattern() {
@@ -405,22 +463,25 @@ function normalizeLabel(value) {
 
 function isKnownMetricLabel(value) {
   const normalized = normalizeLabel(value);
-  return ["growth", "profit/loss", "profit loss", "profitloss", "balance", "equity", "equity percentage", "deposits", "withdrawals", "withdrawal"]
+  return ["growth", "profit/loss", "profit loss", "profitloss", "balance", "equity", "equity percentage"]
     .some((label) => normalized.includes(normalizeLabel(label)));
 }
 
 function parseMoney(value) {
-  const normalized = String(value || "")
+
+  value = value
     .replace(/\u2212/g, "-")
     .replace(/\u2013/g, "-")
     .replace(/\u2014/g, "-");
 
-  const negative = normalized.includes("(") || normalized.includes("-");
+  const negative =
+    value.includes("(") ||
+    value.includes("-");
+
   const numeric = Number(
-    normalized
+    value
       .replace(/USD/gi, "")
-      .replace(/[$,\s()]/g, "")
-      .replace(/-/g, "")
+      .replace(/[$,\s(),-]/g, "")
   );
 
   if (Number.isNaN(numeric)) return null;
@@ -429,18 +490,23 @@ function parseMoney(value) {
 }
 
 function parsePercent(value) {
-  const normalized = String(value || "")
-    .replace(/\u2212/g, "-")
-    .replace(/\u2013/g, "-")
-    .replace(/\u2014/g, "-")
-    .replace(/\s+/g, "");
 
-  const negative = /^-/.test(normalized) || normalized.includes("(");
-  const numeric = Number(normalized.replace(/[^0-9.]/g, ""));
+    value = value
+        .replace(/\u2212/g, "-")
+        .replace(/\u2013/g, "-")
+        .replace(/\u2014/g, "-")
+        .replace(/\s+/g, "");
 
-  if (Number.isNaN(numeric)) return null;
+    const negative = /^-/.test(value) || value.includes("(");
 
-  return negative ? -numeric : numeric;
+    const numeric = Number(
+        value.replace(/[^0-9.]/g, "")
+    );
+
+    if (Number.isNaN(numeric))
+        return null;
+
+    return negative ? -numeric : numeric;
 }
 
 function handleEntrySubmit(event) {
@@ -488,15 +554,11 @@ function buildEntry(firstCloseDate) {
   return {
     id: crypto.randomUUID(),
     system: elements.systemSelect.value,
-    firstClosedTradeDate: firstCloseDate,
     balance,
     closedProfit: state.ocrData.closedProfit,
     equity,
     floatingPL: equity - balance,
     growth: state.ocrData.growth,
-    growthText: state.ocrData.growthText,
-    deposits: state.ocrData.deposits,
-    withdrawals: state.ocrData.withdrawals,
     trackRecord: calculateTrackRecord(firstCloseDate)
   };
 }
@@ -541,7 +603,7 @@ function renderEntries() {
       <td>${formatMoney(entry.closedProfit)}</td>
       <td>${formatMoney(entry.equity)}</td>
       <td>${formatMoney(entry.floatingPL)}</td>
-      <td>${formatPercent(entry.growth, entry.growthText)}</td>
+      <td>${formatPercent(entry.growth)}</td>
       <td>${escapeHtml(entry.trackRecord)}</td>
       <td>
         <div class="row-actions">
@@ -576,10 +638,7 @@ function handleEntryAction(event) {
       balance: entry.balance,
       closedProfit: entry.closedProfit,
       equity: entry.equity,
-      growth: entry.growth,
-      growthText: entry.growthText,
-      deposits: entry.deposits,
-      withdrawals: entry.withdrawals
+      growth: entry.growth
     };
     state.screenshotFile = new File(["edited"], "existing-entry.png", { type: "image/png" });
     elements.systemSelect.value = entry.system;
@@ -623,7 +682,7 @@ function renderSummaryCard(entry, open) {
     ["Closed Profit", formatMoney(entry.closedProfit)],
     ["Equity", formatMoney(entry.equity)],
     ["Floating P/L", formatMoney(entry.floatingPL)],
-    ["Growth", formatPercent(entry.growth, entry.growthText)],
+    ["Growth", formatPercent(entry.growth)],
     ["Track Record", entry.trackRecord]
   ];
 
@@ -632,7 +691,7 @@ function renderSummaryCard(entry, open) {
       <button class="summary-toggle" type="button" aria-label="Toggle ${escapeHtml(entry.system)} summary">
         <strong><span data-indicator>${open ? "▼" : "▶"}</span> ${escapeHtml(entry.system)}</strong>
         <span>${formatMoney(entry.balance)}</span>
-        <span>${formatPercent(entry.growth, entry.growthText)}</span>
+        <span>${formatPercent(entry.growth)}</span>
       </button>
       <div class="summary-content">
         <div class="summary-inner">
@@ -663,7 +722,7 @@ function buildPlainTextSummary() {
     `Closed Profit: ${formatMoney(entry.closedProfit)}`,
     `Equity: ${formatMoney(entry.equity)}`,
     `Floating P/L: ${formatMoney(entry.floatingPL)}`,
-    `Growth: ${formatPercent(entry.growth, entry.growthText)}`,
+    `Growth: ${formatPercent(entry.growth)}`,
     `Track Record: ${entry.trackRecord}`
   ].join("\n")).join("\n\n───────────────────\n\n");
 }
@@ -708,7 +767,7 @@ function updateMetricPreview() {
   metricFields.balance.textContent = data ? formatMoney(data.balance) : "--";
   metricFields.closedProfit.textContent = data ? formatMoney(data.closedProfit) : "--";
   metricFields.equity.textContent = data ? formatMoney(data.equity) : "--";
-  metricFields.growth.textContent = data ? formatPercent(data.growth, data.growthText) : "--";
+  metricFields.growth.textContent = data ? formatPercent(data.growth) : "--";
 }
 
 function setLoading(active, text = "Reading screenshot...") {
@@ -728,10 +787,6 @@ function setMessage(message, type) {
 }
 
 function formatMoney(value) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return "--";
-  }
-
   const formatted = Math.abs(value).toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
@@ -742,12 +797,7 @@ function formatMoney(value) {
   return value < 0 ? `-${formatted}` : formatted;
 }
 
-function formatPercent(value, displayValue = null) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return displayValue ?? "";
-  }
-
-  if (displayValue) return displayValue;
+function formatPercent(value) {
   return `${value.toFixed(2)}%`;
 }
 
