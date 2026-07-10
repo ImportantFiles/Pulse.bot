@@ -695,7 +695,7 @@ function buildPlainTextSummary() {
     `Track Record: ${entry.trackRecord}`
   ].join("\n")).join("\n\n───────────────────\n\n");
 
-  return `As of ${formatTodayDate()}\n\n${entriesText}`;
+  return `As of ${formatTodayDate()}\n\n${entriesText}\n\n======================\n\n`;
 }
 
 function formatTodayDate() {
