@@ -685,7 +685,7 @@ async function copySummaryToClipboard() {
 }
 
 function buildPlainTextSummary() {
-  return state.entries.map((entry) => [
+  const entriesText = state.entries.map((entry) => [
     `System: ${entry.system}`,
     `Balance: ${formatMoney(entry.balance)}`,
     `Closed Profit: ${formatMoney(entry.closedProfit)}`,
@@ -694,6 +694,16 @@ function buildPlainTextSummary() {
     `Growth: ${formatPercent(entry.growth, entry.growthText)}`,
     `Track Record: ${entry.trackRecord}`
   ].join("\n")).join("\n\n───────────────────\n\n");
+
+  return `As of ${formatTodayDate()}\n\n${entriesText}`;
+}
+
+function formatTodayDate() {
+  return new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  });
 }
 
 function startNewReview() {
